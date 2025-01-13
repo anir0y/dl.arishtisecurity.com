@@ -1,33 +1,55 @@
-name: Update Index
+name: Update Index Page
 
 on:
   push:
     branches:
-      - main
-  schedule:
-    - cron: '0 0 * * *'  # runs daily at midnight UTC
+      - main  # or master, depending on your branch naming
+    paths:
+      - '**/*.html'  # adjust this to match the types of files you want to include
+      - '**/*.pdf'
+      - '**/*.txt'   # etc.
 
 jobs:
-  update-index:
+  update_index:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for all tags and branches
 
-      - name: Generate index.html
-        run: |
-          echo '<html><body><h1>File Downloads</h1><ul>' > index.html
-          for file in $(find . -type f ! -name 'index.html' ! -path './.git/*'); do
-            echo "<li><a href='$file'>$(basename $file)</a></li>" >> index.html
-          done
-          echo '</ul></body></html>' >> index.html
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
 
-      - name: Commit and push changes
-        env:
-          ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add index.html
-          git commit -m 'Update index.html with download links'
-          git push https://${{ secrets.ACTIONS_PAT }}@github.com/anir0y/dl.arishtisecurity.com.git
+    - name: Update Index File
+      run: |
+        import os
+        import glob
+
+        index_content = "<html><body><h1>Downloads</h1><ul>"
+
+        for file_path in glob.glob("**/*", recursive=True):
+          if os.path.isfile(file_path) and not file_path.startswith(".git"):
+            relative_path = os.path.relpath(file_path, '.')
+            index_content += f'<li><a href="/{relative_path}">{relative_path}</a></li>'
+        
+        index_content += "</ul></body></html>"
+        
+        with open('index.html', 'w') as index_file:
+          index_file.write(index_content)
+
+      shell: python
+
+    - name: Commit and Push Changes
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git add index.html
+        if git diff --staged --quiet; then
+          echo "No changes to commit."
+        else
+          git commit -m "Update index.html with latest download links"
+          git push
+        fi
